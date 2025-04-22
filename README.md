@@ -25,8 +25,8 @@ terraform rm aws_security_group.three
 
 Still missing:
 
-* Non-static values in `moved` addresses https://github.com/hashicorp/terraform/issues/31335
-* Dynamic `moved` blocks https://github.com/hashicorp/terraform/issues/33236
+* [Non-static values in `moved` addresses](https://github.com/hashicorp/terraform/issues/31335)
+* [Dynamic `moved` blocks](https://github.com/hashicorp/terraform/issues/33236)
 
 ## Examples
 
@@ -106,10 +106,12 @@ moved {
   from = aws_s3_bucket.buckets[0]
   to   = aws_s3_bucket.buckets["one"]
 }
+
 moved {
   from = aws_s3_bucket.buckets[1]
   to   = aws_s3_bucket.buckets["two"]
 }
+
 moved {
   from = aws_s3_bucket.buckets[2]
   to   = aws_s3_bucket.buckets["three"]
@@ -123,12 +125,177 @@ moved {
   from = aws_s3_bucket.one
   to   = module.alpha.aws_s3_bucket.one
 }
+
 moved {
   from = module.alpha.aws_s3_bucket.one
   to   = aws_s3_bucket.one
 }
+
 moved {
   from = module.alpha.aws_s3_bucket.one
   to   = module.beta.aws_s3_bucket.one
+}
+```
+
+### Importing resources
+
+```hcl
+import {
+  to = aws_instance.this
+  id = "i-abcdef0123"
+}
+
+import {
+  to = aws_s3_bucket.this
+  id = "bucket-name"
+}
+
+import {
+  to = aws_iam_policy.example
+  id = "arn:aws:iam::123456789012:policy/example-policy"
+}
+```
+
+Typically we would write the code for the imported resources by hand (as for new ones) but we can also have Terraform **generate the code** for us:
+
+```
+terraform plan -generate-config-out=imported-resources.tf
+```
+
+### Optionally importing resources
+
+```hcl
+import {
+  for_each = var.import_flag ? [1] : []
+  to       = aws_s3_bucket.this
+  id       = "bucket-name"
+}
+```
+
+The `import` block doesn't support count.
+
+### Importing resources dynamically
+
+```hcl
+local {
+  region_to_id_map = {
+    eu-west-1    = "i-aaaaaaaaaa"
+    us-east-1    = "i-bbbbbbbbbb"
+    ca-central-1 = "i-cccccccccc"
+  }
+}
+
+import {
+  to = aws_instance.this
+  id = local.region_to_id_map[var.aws_region]
+}
+
+resource "aws_instance" "this" {
+  ...
+}
+```
+
+```hcl
+local {
+  buckets = {
+    one   = "bucket-one"
+    two   = "bucket-two"
+    three = "bucket-three"
+  }
+}
+
+import {
+  for_each = local.buckets
+  to       = aws_s3_bucket.buckets[each.key]
+  id       = each.value
+}
+
+resource "aws_s3_bucket" "buckets" {
+  for_each = local.buckets
+  ...
+}
+```
+
+### Removing resources from state
+
+```hcl
+removed {
+  from = aws_db_instance.mysql
+  lifecycle {
+    destroy = false
+  }
+}
+```
+
+No instance keys, such as `aws_db_instance.mysql[0]`, are allowed.
+
+```
+removed {
+  from = aws_instance.this
+  lifecycle {
+    destroy = true
+  }
+  provisioner "local-exec" {
+    when    = destroy
+    command = "echo 'Instance ${self.id} has been destroyed.'"
+  }
+}
+```
+
+### Combining various techniques
+
+Real-world example where a [new version of the Datadog provider](https://github.com/DataDog/terraform-provider-datadog/releases/tag/v3.50.0) replaced several separate resources with a single one.
+
+Old:
+```hcl
+resource "datadog_integration_aws" "this" {
+  account_id = var.aws_account_id
+  ...
+}
+
+resource "datadog_integration_aws_log_collection" "this" {
+  account_id = var.aws_account_id
+  ...
+}
+```
+
+New:
+```hcl
+removed {
+  from = datadog_integration_aws.this
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = datadog_integration_aws_log_collection.this
+  lifecycle {
+    destroy = false
+  }
+}
+
+locals {
+  integration_ids = {
+    "1234567890" = "aaaabbbb-cccc-dddd-eeee-1234567890"
+    "2345678901" = "11112222-3333-4444-5555-abcdef9876"
+    ...
+  }
+}
+
+import {
+  for_each = var.aws_region == "eu-west-1" ? [1] : []
+  to       = datadog_integration_aws_account.this
+  id       = local.integration_ids[var.aws_account_id]
+}
+
+resource "datadog_integration_aws_account" "this" {
+  aws_account_id = var.aws_account_id
+  ...
+  logs_config {
+    lambda_forwarder {
+      ...
+    }
+  }
 }
 ```
