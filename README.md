@@ -30,7 +30,7 @@ Still missing:
 
 ## Examples
 
-### Rename resources
+### Renaming resources
 ```hcl
 moved {
   from = aws_s3_bucket.one
@@ -38,7 +38,7 @@ moved {
 }
 ```
 
-### Rename modules
+### Renaming module calls
 ```hcl
 moved {
   from = module.alpha
@@ -97,6 +97,7 @@ New:
 ```hcl
 resource "aws_s3_bucket" "buckets" {
   for_each = toset(["one", "two", "three"])
+  ...
 }
 ```
 
@@ -117,7 +118,7 @@ moved {
 
 ### Moving between modules
 
-```
+```hcl
 moved {
   from = aws_s3_bucket.one
   to   = module.alpha.aws_s3_bucket.one
