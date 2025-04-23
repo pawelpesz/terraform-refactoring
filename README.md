@@ -11,8 +11,9 @@ https://developer.hashicorp.com/terraform/language/modules/develop/refactoring
 Terraform CLI commands:
 
 ```
-terraform mv aws_security_group.one aws_security_group.two
-terraform rm aws_security_group.three
+terraform state mv aws_security_group.one aws_security_group.two
+terraform state rm aws_security_group.three
+terraform import aws_security_group.four sg-abcd1234
 ```
 
 ## The new way
